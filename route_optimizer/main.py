@@ -6,7 +6,6 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__)) + "/../"
 
 
 def main():
-    # Atlantic
     lon_range = (-90, 10)
     lat_range = (20, 52)
     p_englishchannel = (-6.0, 49.0)
