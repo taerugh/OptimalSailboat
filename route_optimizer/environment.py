@@ -1,153 +1,90 @@
 """
-Environment for route optimizer
+Environment object for route_optimizer
+author: @taerugh
 """
 
 import os
 import numpy as np
-import shapefile as shp
+from typing import Optional, Self
+from datetime import datetime
 import shapely.geometry as geometry
-import xarray as xr
-from scipy.interpolate import LinearNDInterpolator
 
 import utils
-from utils import Node
+from utils import Coordinate
+from boat import Boat
+from land import Land
+from weather import Weather
+
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__)) + "/../"
 
 
-class Obstacle:
-    def __init__(self, shp_filepath):
-        self.shapes, self.points, self.polys = self.unpack_obstacle_data(shp_filepath)
-
-    @staticmethod
-    def unpack_obstacle_data(shp_filepath):
-        land_sf = shp.Reader(shp_filepath)
-
-        land_shapes = land_sf.shapes()
-        land_points = []
-        land_polys = []
-        for shape in land_shapes:
-            shape_points = np.array(shape.points)
-            shape_intervals = list(shape.parts) + [len(shape.points)]
-            for (i, j) in zip(shape_intervals[:-1], shape_intervals[1:]):
-                land_points.append(shape_points[i:j])
-                land_polys.append(geometry.Polygon(land_points[-1]))
-        
-        return land_shapes, land_points, land_polys
+class Node:
+    def __init__(self, coord:Coordinate, elapsed=None, parent:Optional[Self]=None):
+        self.coord = coord
+        self.elapsed = elapsed
+        self.parent = parent
 
 
-class Weather:
-    def __init__(self, grib_filepath, lon_range, lat_range):
-        self.df, self.calc_uv, self.calc_ws = self.unpack_weather_data(grib_filepath, lon_range, lat_range)
-    
-    @staticmethod
-    def unpack_weather_data(grib_filepath, lon_range, lat_range):
-        weather_ds = xr.open_dataset(grib_filepath, engine='cfgrib')
-        weather_df = weather_ds.to_dataframe()
-
-        # Remove sequences
-        weather_df = weather_df.loc[weather_df.index.get_level_values('orderedSequenceData') == 1].droplevel('orderedSequenceData')
-
-        # Remove step, surface, valid_time columns
-        weather_df.drop(columns=['step', 'surface', 'valid_time'], inplace=True)
-
-        # Make lat/lon columns
-        weather_df.reset_index(level=['latitude', 'longitude'], inplace=True)
-
-        # Wrap lon to [-180, 180]
-        weather_df['longitude'] = weather_df['longitude'].map(lambda lon: (lon - 360) if (lon > 180) else lon)
-
-        # Bound lat/lon
-        lat_filter = (weather_df['latitude'] >= lat_range[0]) & (weather_df['latitude'] <= lat_range[1])
-        lon_filter = (weather_df['longitude'] >= lon_range[0]) & (weather_df['longitude'] <= lon_range[1])
-        weather_df = weather_df.loc[lat_filter & lon_filter]
-
-        # Convert velocities from m/s to knots
-        weather_df['u'] = utils.mps2knot(weather_df['u'])
-        weather_df['v'] = utils.mps2knot(weather_df['v'])
-        weather_df['ws'] = utils.mps2knot(weather_df['ws'])
-
-        # Convert angles from deg to rad
-        weather_df['wdir'] = np.deg2rad(weather_df['wdir'])
-
-        # Sort
-        weather_df.sort_values(by=['longitude', 'latitude'], ascending=[True, True], inplace=True)
-
-        ### functions
-        lons = weather_df['longitude'].to_numpy()
-        lats = weather_df['latitude'].to_numpy()
-        us = weather_df['u'].fillna(0).to_numpy()
-        vs = weather_df['v'].fillna(0).to_numpy()
-        # wdirs = weather_df['wdir'].fillna(0).to_numpy()
-        wss = weather_df['ws'].fillna(0).to_numpy()
-
-        # wind velocity (u,v) as a function of location (lon, lat)
-        calc_uv = LinearNDInterpolator(np.array([lons, lats]).T, np.array([us, vs]).T)
-        # calc_wdir = LinearNDInterpolator(np.array([lons, lats]).T, wdirs)
-        calc_ws = LinearNDInterpolator(np.array([lons, lats]).T, wss)
-
-        return weather_df, calc_uv, calc_ws
-
-
-class Boat:
-    def __init__(self, csv_filepath):
-        self.calc_bsp = self.unpack_boat_data(csv_filepath)
-
-    @staticmethod
-    def unpack_boat_data(csv_filepath):
-        polar_data = np.loadtxt(csv_filepath, delimiter=',', skiprows=1)
-        twas, twss, bsps = polar_data.T
-
-        # BSP as a function of TWA and TWS
-        calc_bsp = LinearNDInterpolator(np.array([twas, twss]).T, bsps)
-
-        return calc_bsp
-
-
-class Env:
-    def __init__(self, land_filepath, weather_filepath, boat_filepath, lon_range, lat_range):
+class Environment:
+    def __init__(self, land_filepath, boat_filepath, weather_dirpath,
+                 weather_type, datecycle:datetime,
+                 lon_range, lat_range, tf=384, dt=12):
+        '''
+        weather_type: "forecast"|"historical"
+        '''
         self.lon_range = lon_range
         self.lat_range = lat_range
-        self.land = Obstacle(land_filepath)
-        self.weather = Weather(weather_filepath, lon_range, lat_range)
+        self.land = Land(land_filepath)
+        self.weather = Weather(weather_dirpath, weather_type, datecycle, lon_range, lat_range, tf, dt)
         self.boat = Boat(boat_filepath)
     
-    def is_collision(self, node1:Node, node2:Node):
-        line = geometry.LineString([node1.point(), node2.point()])
+
+    def is_collision(self, coord1:Coordinate, coord2:Coordinate):
+        line = geometry.LineString([coord1.point(), coord2.point()])
         return any(line.within(poly) for poly in self.land.polys)
     
+
     def time_route(self, route):
         t = 0
         for i in range(len(route)-1):
-            t += self.time_to_go(Node(route[i]), Node(route[i+1]))
+            t += self.time_to_go(Node(Coordinate(*route[i]), elapsed=t), Node(Coordinate(*route[i+1])))
         return t
     
+
     def distance_route(self, route):
         d = 0
         for i in range(len(route)-1):
-            d += utils.haversine_distance(Node(route[i]), Node(route[i+1]))
+            d += utils.haversine_distance(Coordinate(*route[i]), Coordinate(*route[i+1]))
         return d
     
-    def time_to_go(self, node_start:Node, node_end:Node, min_dist=10.0):
-        dist = utils.haversine_distance(node_start, node_end)
+
+    def time_to_go(self, node_start:Node, node_end:Node, min_dist=10.0, t_max=24*12):
+        dist = utils.haversine_distance(node_start.coord, node_end.coord)
         n = max(2, int(dist / min_dist))
-        segments = np.linspace(node_start.point(), node_end.point(), n)
-        time = np.sum([self.time_segment(Node(segments[i]), Node(segments[i+1])) for i in range(n-1)])
-        return time
+        segments = np.linspace(node_start.coord.point(), node_end.coord.point(), n)
+        
+        t = node_start.elapsed
+        for i in range(n-1):
+            if t >= t_max: return np.inf
+            t += self.time_segment(t, Coordinate(*segments[i]), Coordinate(*segments[i+1]))
+
+        return t - node_start.elapsed
     
-    def time_segment(self, node_start:Node, node_end:Node):
-        boat_speed = self.boat_speed(node_start, node_end)
-        segment_distance = utils.haversine_distance(node_start, node_end)
+
+    def time_segment(self, elapsed, coord_start:Coordinate, coord_end:Coordinate):
+        boat_speed = self.calc_boat_speed(elapsed, coord_start, coord_end)
+        segment_distance = utils.haversine_distance(coord_start, coord_end)
         if boat_speed < 1e-3:
             segment_time = np.inf
         else:
             segment_time = segment_distance / boat_speed
         return segment_time
 
-    def boat_speed(self, node_start:Node, node_end:Node):
-        boat_dir = utils.angle(node_start, node_end)
-        wind_speed = self.weather.calc_ws(*node_start.point())
-        wind_dir = np.arctan2(*self.weather.calc_uv(*node_start.point())[::-1])
+
+    def calc_boat_speed(self, elapsed, coord_start:Coordinate, coord_end:Coordinate):
+        boat_dir = utils.angle(coord_start, coord_end)
+        wind_speed, wind_dir = self.weather.calc_ws_wdir((elapsed, coord_start.lon, coord_start.lat))
         twa = utils.wrap2pi(boat_dir - wind_dir - np.pi)
-        boat_speed = self.boat.calc_bsp(twa, wind_speed)
+        boat_speed = self.boat.calc_bsp((twa, wind_speed))
         return boat_speed
