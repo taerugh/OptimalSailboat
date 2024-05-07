@@ -36,7 +36,7 @@ def plot(env:Environment, t=None, title='', route=None, nodelist=None, filepath=
     return fig, ax
 
 
-def animate(env:Environment, tf, dt, title='', route=None, filepath=None, v_range=None, min_dist=10.0):
+def animate(env:Environment, tf, dt, title='', route=None, filepath=None, v_range=None):
     if v_range is None: v_range = (env.weather.df['ws'].min(),env.weather.df['ws'].max())
     fig, ax = plt.subplots()
     setup_plot(ax, env.lon_range, env.lat_range)
@@ -49,7 +49,7 @@ def animate(env:Environment, tf, dt, title='', route=None, filepath=None, v_rang
         route_segments = []
         for i in range(len(route)-1):
             dist = utils.haversine_distance(Coordinate(*route[i]), Coordinate(*route[i+1]))
-            n = max(2, int(dist / min_dist))
+            n = max(2, int(dist / env.min_dist))
             route_segments.extend(np.linspace(route[i], route[i+1], n))
         route_segments = np.array(route_segments)
 
@@ -64,9 +64,11 @@ def animate(env:Environment, tf, dt, title='', route=None, filepath=None, v_rang
             plot_dynamicroute(ax, env, route_segments, t)
         ax.set_title(f'elapsed time: {t} hours')
 
-    ani = FuncAnimation(fig, func, frames=np.arange(0, tf, dt))
+    ani = FuncAnimation(fig, func, frames=np.arange(0, tf+dt, dt));
 
     if filepath is not None: ani.save(filepath, fps=10)
+
+    return ani
 
 
 def animate_winddelta(env1:Environment, env2:Environment, tf, dt, title='', filepath=None):

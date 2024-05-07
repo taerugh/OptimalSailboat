@@ -11,7 +11,7 @@ import numpy as np
 
 import utils, plotting
 from environment import Environment, Node
-from utils import Coordinate
+from utils import Coordinate, PortPair
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__)) + "/../"
 
@@ -19,22 +19,21 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__)) + "/../"
 class RRT_Star:
     def __init__(self,
                  land_filepath,
-                 weather_filepath,
                  boat_filepath,
-                 lon_range,
-                 lat_range,
-                 x_start,
-                 x_goal,
-                 route_name,
+                 weather_dirpath,
+                 weather_type,
+                 portpair:PortPair,
+                 datecycle:datetime,
+                 t_max,
                  step_len, # [nmi]
                  search_radius, # [nmi]
                  goal_sample_rate, 
                  iter_max,
                  verbose=False,
                  log=False):
-        self.s_start = Node(Coordinate(*x_start), elapsed=0.0)
-        self.s_goal = Node(Coordinate(*x_goal))
-        self.route_name = route_name
+        self.s_start = Node(portpair.p_start, elapsed=0.0)
+        self.s_goal = Node(portpair.p_end)
+        self.route_name = f'{portpair.shortname}.{weather_type}.{datecycle.strftime('%Y%m%d%H')}'
         self.step_len = step_len
         self.goal_sample_rate = goal_sample_rate
         self.search_radius = search_radius
@@ -46,7 +45,7 @@ class RRT_Star:
         self.route = None
 
         if self.verbose: print('Setting up environment', end='... ', flush=True)
-        self.env = Environment(land_filepath, weather_filepath, boat_filepath, lon_range, lat_range)
+        self.env = Environment(land_filepath, boat_filepath, weather_dirpath, weather_type, portpair.lon_range, portpair.lat_range, datecycle, tf=t_max)
         if self.verbose: print('Done!')
 
     def planning(self):
@@ -55,7 +54,7 @@ class RRT_Star:
         for k in range(self.iter_max):
             if self.verbose and (k+1)%500==0: print('  ' + f'iter {k+1}', flush=True)
             if self.log and (k+1)%500==0: 
-                plotting.plot(self.env, f'{self.route_name}, rrt* iter = {k+1}',
+                plotting.plot(self.env,
                               nodelist=self.nodes,
                               filepath=ROOT_DIR+f'route_optimizer/output/log/{self.route_name}_iter{k+1}.png')
 
@@ -74,7 +73,6 @@ class RRT_Star:
                     self.rewire(node_new, neighbor_indices)
 
         index = self.search_goal_parent()
-        print(f'index = {index}')
         self.route = self.extract_path(self.nodes[index])
 
         duration = time.time() - timestart
@@ -82,7 +80,7 @@ class RRT_Star:
 
         np.savetxt(ROOT_DIR+f'route_optimizer/output/routes/{self.route_name}.csv', self.route, delimiter=',')
         with open(ROOT_DIR+f'route_optimizer/output/route_times.csv','a') as file: file.write(f'{self.route_name},{self.env.time_route(self.route)}\n')
-        plotting.plot(self.env, 0, f'{self.route_name} rrt*',
+        plotting.plot(self.env,
                       route=self.route, nodelist=self.nodes,
                       filepath=ROOT_DIR+f'route_optimizer/output/search_plots/{self.route_name}.png')
 
@@ -111,16 +109,13 @@ class RRT_Star:
 
     def search_goal_parent(self):
         dist_list = [utils.haversine_distance(nd.coord, self.s_goal.coord) for nd in self.nodes]
-        print(f'dist_list len = {len(dist_list)}')
         node_index = [i for i in range(len(dist_list)) if dist_list[i] <= self.step_len]
-        print(f'node_index len = {len(node_index)}')
 
         if len(node_index) == 0:
             return len(self.nodes) - 1
 
         cost_list = [self.get_new_elapsed(self.nodes[i], self.s_goal) for i in node_index
                      if not self.env.is_collision(self.nodes[i].coord, self.s_goal.coord)]
-        print(f'cost_list len = {len(cost_list)}')
         return node_index[np.argmin(cost_list)]
 
     def get_new_elapsed(self, node_start:Node, node_end:Node):

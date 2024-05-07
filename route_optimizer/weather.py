@@ -14,8 +14,8 @@ import utils
 
 
 class Weather:
-    def __init__(self, weather_dirpath, weather_type, datecycle:datetime, lon_range, lat_range, tf, dt):
-        self.df, self.calc_u, self.calc_v = self.unpack_weather_data(weather_dirpath, weather_type, datecycle, lon_range, lat_range, tf, dt)
+    def __init__(self, weather_dirpath, weather_type, lon_range, lat_range, datecycle:datetime, tf, dt):
+        self.df, self.calc_u, self.calc_v = self.unpack_weather_data(weather_dirpath, weather_type, lon_range, lat_range, datecycle, tf, dt)
 
 
     def calc_ws(self, xi):
@@ -43,7 +43,9 @@ class Weather:
         return ws, wdir
     
 
-    def unpack_weather_data(self, weather_dirpath, weather_type, datecycle:datetime, lon_range, lat_range, tf, dt):
+    def unpack_weather_data(self, weather_dirpath, weather_type,
+                            lon_range, lat_range,
+                            datecycle:datetime, tf, dt):
         '''
         type: 'forecast' or 'historical'
         '''

@@ -27,16 +27,20 @@ class Node:
 
 
 class Environment:
-    def __init__(self, land_filepath, boat_filepath, weather_dirpath,
-                 weather_type, datecycle:datetime,
-                 lon_range, lat_range, tf=384, dt=12):
+    def __init__(self, land_filepath, boat_filepath,
+                 weather_dirpath, weather_type,
+                 lon_range, lat_range,
+                 datecycle:datetime, tf=24*10, dt=12, min_dist=1.0):
         '''
         weather_type: "forecast"|"historical"
         '''
         self.lon_range = lon_range
         self.lat_range = lat_range
+        self.tf = tf
+        self.dt = dt
+        self.min_dist = min_dist
         self.land = Land(land_filepath)
-        self.weather = Weather(weather_dirpath, weather_type, datecycle, lon_range, lat_range, tf, dt)
+        self.weather = Weather(weather_dirpath, weather_type, lon_range, lat_range, datecycle, tf, dt)
         self.boat = Boat(boat_filepath)
     
 
@@ -59,14 +63,14 @@ class Environment:
         return d
     
 
-    def time_to_go(self, node_start:Node, node_end:Node, min_dist=10.0, t_max=24*12):
+    def time_to_go(self, node_start:Node, node_end:Node):
         dist = utils.haversine_distance(node_start.coord, node_end.coord)
-        n = max(2, int(dist / min_dist))
+        n = max(2, int(dist / self.min_dist))
         segments = np.linspace(node_start.coord.point(), node_end.coord.point(), n)
         
         t = node_start.elapsed
         for i in range(n-1):
-            if t >= t_max: return np.inf
+            if t >= self.tf-24 or np.isnan(t): return np.inf
             t += self.time_segment(t, Coordinate(*segments[i]), Coordinate(*segments[i+1]))
 
         return t - node_start.elapsed

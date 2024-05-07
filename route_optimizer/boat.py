@@ -14,7 +14,7 @@ class Boat:
 
 
     @staticmethod
-    def unpack_boat_data(pol_filepath):
+    def unpack_boat_data(pol_filepath) -> tuple[pd.DataFrame, RegularGridInterpolator]:
         polar_df = pd.read_csv(pol_filepath, delimiter=',')
         polar_df.rename(columns={'TWA\\TWS': 'TWA'}, inplace=True)
 
@@ -23,10 +23,13 @@ class Boat:
         polar_mirror_df['TWA'] = -polar_mirror_df['TWA']
         polar_df = polar_df.merge(polar_mirror_df, how='outer')
 
+        # Convert to radians
+        polar_df['TWA'] = np.deg2rad(polar_df['TWA'])
+
         # Set TWA to the DataFrame index
         polar_df.set_index('TWA', inplace=True)
 
-        twas = np.deg2rad(polar_df.index.to_numpy(dtype=float))
+        twas = polar_df.index.to_numpy(dtype=float)
         twss = polar_df.columns.to_numpy(dtype=float)
         bsps = polar_df.to_numpy(dtype=float)
 

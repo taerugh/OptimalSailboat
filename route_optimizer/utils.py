@@ -4,7 +4,11 @@ Utilities for route optimizer
 
 import numpy as np
 
+#* Constants
+R = 3443.92 # earth's radius [nmi]
 
+
+#* Classes
 class Coordinate:
     def __init__(self, lon, lat):
         self.lon = lon
@@ -14,8 +18,17 @@ class Coordinate:
         return (self.lon, self.lat)
 
 
-R = 3443.92 # earth's radius [nmi]
-    
+class PortPair:
+    def __init__(self, longname, shortname, p_start:Coordinate, p_end:Coordinate, lon_range, lat_range):
+        self.longname = longname
+        self.shortname = shortname
+        self.p_start = p_start
+        self.p_end = p_end
+        self.lon_range = lon_range
+        self.lat_range = lat_range
+
+
+#* Functions
 def haversine_distance(coord1:Coordinate, coord2:Coordinate):
     dlat = np.deg2rad(coord2.lat - coord1.lat)
     dlon = np.deg2rad(coord2.lon - coord1.lon)
@@ -46,16 +59,3 @@ def wrap2pi(theta):
 
 def second2hour(seconds):
     return seconds / 3600.0
-
-
-# def create_gif_from_folder(folder_path, output_path):
-#     images = []
-#     for filename in os.listdir(folder_path):
-#         if filename.endswith(".png"):
-#             image_path = os.path.join(folder_path, filename)
-#             image = Image.open(image_path)
-#             images.append(image)
-
-#     output_path = os.path.join(output_path, "output.gif")
-#     images[0].save(output_path, save_all=True, append_images=images[1:], optimize=False, duration=200, loop=0)
-#     return output_path
