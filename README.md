@@ -2,6 +2,8 @@
 
 Optimal control applied to an autonomous sailboat for 16-745 Optimal Control & Reinforcement Learning.
 
+[Report](https://github.com/taerugh/OptimalSailboat/blob/main/report/optimal_sailboat.pdf)
+
 ## Route Planning
 
 #### LA to SF
