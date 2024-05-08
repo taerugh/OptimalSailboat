@@ -1,6 +1,6 @@
 # OptimalSailboat
 
-Optimal control applied to an autonomous sailboat for 16-745 Optimal Control & Reinforcement Learning.
+Optimal control applied to an autonomous sailboat for 16-745 Optimal Control & Reinforcement Learning course at CMU.
 
 [Report](https://github.com/taerugh/OptimalSailboat/blob/main/report/optimal_sailboat.pdf)
 
