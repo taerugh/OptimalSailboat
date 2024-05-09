@@ -4,6 +4,8 @@ Optimal control applied to an autonomous sailboat for 16-745 Optimal Control & R
 
 [Report](https://github.com/taerugh/OptimalSailboat/blob/main/report/optimal_sailboat.pdf)
 
+![Poster](https://github.com/taerugh/OptimalSailboat/blob/main/poster/optimal_sailboat_poster.jpg)
+
 ## Route Planning
 
 #### LA to SF
